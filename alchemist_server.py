@@ -295,7 +295,7 @@ def get_claude_analysis(data: dict) -> str:
     try:
         log.info(f"Sending to Claude: {data.get('symbol')} {data.get('signal')}")
         message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20251001",
             max_tokens=1000,
             system=SYSTEM_PROMPT,
             messages=[
