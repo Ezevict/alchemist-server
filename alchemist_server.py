@@ -364,14 +364,31 @@ def webhook():
         log.warning("Invalid webhook signature — rejected")
         return jsonify({"error": "Invalid signature"}), 401
 
-    # ── Parse JSON ──
+    # ── Parse JSON (handle plain text from TradingView gracefully) ──
     try:
-        data = request.get_json(force=True)
+        data = request.get_json(force=True, silent=True)
         if not data:
-            return jsonify({"error": "Empty payload"}), 400
+            raw = request.data.decode("utf-8", errors="ignore").strip()
+            log.warning(f"Non-JSON payload received: {raw[:200]}")
+            data = {
+                "symbol":   "UNKNOWN",
+                "timeframe":"UNKNOWN",
+                "signal":   "BUY" if "buy" in raw.lower() else "SELL" if "sell" in raw.lower() else "UNKNOWN",
+                "price":    "N/A",
+                "atr":      "N/A",
+                "bias":     "UNKNOWN",
+                "killzone": "UNKNOWN",
+                "snr_type": "UNKNOWN",
+                "sl":       "N/A",
+                "tp1":      "N/A",
+                "tp2":      "N/A",
+                "rr_tp1":  "N/A",
+                "rr_tp2":  "N/A",
+                "note":     f"Raw alert: {raw[:300]}"
+            }
     except Exception as e:
-        log.error(f"JSON parse error: {e}")
-        return jsonify({"error": "Invalid JSON"}), 400
+        log.error(f"Payload parse error: {e}")
+        data = {"signal": "UNKNOWN", "symbol": "UNKNOWN", "note": str(e)}
 
     signal = data.get("signal", "UNKNOWN").upper()
     symbol = data.get("symbol", "UNKNOWN")
