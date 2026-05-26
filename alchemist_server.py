@@ -424,6 +424,29 @@ def webhook_bos():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@app.route("/test", methods=["GET", "POST"])
+def test():
+    """Fire a sample SLK signal through Claude and Telegram."""
+    sample_data = {
+        "ticker": "USDCAD",
+        "exchange": "FOREXCOM",
+        "interval": "120",
+        "signal": "BUY Signal",
+        "close": "1.38200",
+        "strategy": "SLK",
+        "note": "Test signal — SLK V7 BUY confirmed",
+    }
+    if request.method == "POST":
+        try:
+            analysis = analyze_with_claude(sample_data, is_bos=False)
+            send_telegram("🧪 TEST SIGNAL — SLK Server v3.0\n\n" + analysis)
+            return jsonify({"status": "ok", "test": True, "preview": analysis[:200]}), 200
+        except Exception as e:
+            logging.error(f"/test error: {e}", exc_info=True)
+            return jsonify({"status": "error", "message": str(e)}), 500
+    return jsonify({"info": "POST to /test to fire a sample SLK signal", "sample": sample_data}), 200
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "healthy", "version": "3.0", "strategy": "SLK"}), 200
@@ -438,6 +461,8 @@ def index():
         "endpoints": {
             "POST /webhook": "BUY/SELL signals",
             "POST /webhook/bos": "Break of Structure alerts",
+            "GET /test": "Preview test payload",
+            "POST /test": "Fire sample USDCAD BUY signal through Claude + Telegram",
             "GET /health": "Health check",
         }
     }), 200
