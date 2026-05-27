@@ -309,21 +309,64 @@ def format_timeframe(interval: str) -> str:
     return TIMEFRAME_LABELS.get(str(interval), f"{interval}M")
 
 
+def _clean_for_telegram(message: str) -> str:
+    """Strip markdown and problematic formatting from Claude's response."""
+    import re
+    clean = message
+    # Strip markdown bold/italic/code
+    clean = clean.replace("**", "").replace("```", "").replace("`", "")
+    clean = clean.replace("__", "")
+    # Strip table separator rows (|---|---|)
+    clean = re.sub(r"^\|[-| :]+\|.*$", "", clean, flags=re.MULTILINE)
+    # Collapse runs of 3+ dashes to a single em-dash
+    clean = re.sub(r"-{3,}", "—", clean)
+    # Collapse blank lines (more than 2 in a row → 2)
+    clean = re.sub(r"\n{3,}", "\n\n", clean)
+    return clean.strip()
+
+
+def _send_chunk(url: str, chat_id: str, text: str, parse_mode: str | None) -> bool:
+    payload: dict = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    resp = requests.post(url, json=payload, timeout=10)
+    resp.raise_for_status()
+    return True
+
+
 def send_telegram(message: str) -> None:
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         logging.warning("Telegram env vars not set — skipping Telegram notification")
         return
+
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    try:
-        resp = requests.post(
-            url,
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        logging.info("Telegram message sent OK")
-    except Exception as e:
-        logging.error(f"Telegram send failed: {e}")
+    clean = _clean_for_telegram(message)
+
+    # Split into ≤4096-char chunks at paragraph boundaries
+    MAX = 4096
+    chunks: list[str] = []
+    while len(clean) > MAX:
+        split_at = clean.rfind("\n\n", 0, MAX)
+        if split_at == -1:
+            split_at = MAX
+        chunks.append(clean[:split_at].strip())
+        clean = clean[split_at:].strip()
+    chunks.append(clean)
+
+    for chunk in chunks:
+        if not chunk:
+            continue
+        # Try HTML first, fall back to plain text
+        try:
+            _send_chunk(url, TELEGRAM_CHAT_ID, chunk, "HTML")
+            logging.info("Telegram message sent OK (HTML)")
+        except Exception as e_html:
+            logging.warning(f"Telegram HTML send failed ({e_html}), retrying as plain text")
+            try:
+                _send_chunk(url, TELEGRAM_CHAT_ID, chunk, None)
+                logging.info("Telegram message sent OK (plain text)")
+            except Exception as e_plain:
+                logging.error(f"Telegram send failed entirely: {e_plain}")
 
 
 def build_user_message(data: dict, is_bos: bool) -> str:
