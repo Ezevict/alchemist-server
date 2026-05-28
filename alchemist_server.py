@@ -10,6 +10,14 @@ import logging
 from flask import Flask, request, jsonify
 import anthropic
 import requests
+import re
+
+try:
+    import deriv_api_bot as _deriv
+    _DERIV_AVAILABLE = True
+except ImportError:
+    _deriv = None
+    _DERIV_AVAILABLE = False
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -20,6 +28,11 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
+
+MT5_BOT_URL = os.environ.get("MT5_BOT_URL", "")
+if _DERIV_AVAILABLE:
+    _deriv.start_bot()
+    logging.info("Deriv trading bot started")
 # ---------------------------------------------------------------------------
 # SLK SYSTEM PROMPT — Full framework by The 4th Man (NWAOLOKO IFEANYI A.)
 # ---------------------------------------------------------------------------
@@ -518,3 +531,11 @@ def index():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
+
+
+
+
+
+
+
